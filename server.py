@@ -11,7 +11,7 @@ MAX_CONNECTIONS = 5
 
 def client_mgr(conn, addr):
     while True:
-        message = conn.recv(2048)
+        message = conn.recv(1024)
         if message:
             # handle client message here
             # if control message, perform function on the server
