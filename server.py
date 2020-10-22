@@ -9,29 +9,40 @@ PORT = 4252
 MAX_CONNECTIONS = 5
 
 
-def client_mgr(conn, addr):
+class User:
+    nick = ""
+    conn = None
+    addr = ""
+
+    def __init__(self, conn, addr, nick):
+        self.nick = nick
+        self.conn = conn
+        self.addr = addr
+
+
+def client_mgr(cli):
     while True:
         try:
-            message = conn.recv(1024)
+            message = cli.conn.recv(1024)
         except ConnectionResetError:
             # Connection failed, possibly due to a non-expected termination on client side
             # i.e. client crashed or force closed
             active_connections.remove(conn)
-            conn.shutdown(socket.SHUT_RDWR)
-            conn.close()
+            cli.conn.shutdown(socket.SHUT_RDWR)
+            cli.conn.close()
             break
         if message:
             # handle client message here
             message = message.decode()
-            print(addr, ":", message)
+            print(cli.addr, ":", message)
             if message[0] == "/":
                 print("Control message: ", message)
                 # if control message, perform function on the server
-                if not control_msg_handler(conn, message):
+                if not control_msg_handler(cli, message):
                     # control_msg_handler returns False, terminating connection
                     break
             # if non-control message, broadcast message
-            msg_handler(conn, message)
+            msg_handler(cli, message)
         else:
             # message is empty. Do we kill the connection, or do we send an error message?
             # prevent empty message sent from client side?
@@ -39,31 +50,32 @@ def client_mgr(conn, addr):
             pass
 
 
-def control_msg_handler(conn, message):
+def control_msg_handler(sender, message):
     if message == "/quit":
-        print(conn, " disconnecting")
+        print(sender.nick, " disconnecting")
         if conn in active_connections:
-            active_connections.remove(conn)
-        conn.shutdown(socket.SHUT_RDWR)
-        conn.close()
+            active_connections.remove(sender)
+        sender.conn.shutdown(socket.SHUT_RDWR)
+        sender.conn.close()
         return False
     # message is special command
     # i.e. /nickname, /msg (private message), /exit or /quit, etc.
     pass
 
 
-def msg_handler(conn, message):
+def msg_handler(sender, message):
     # message is not control message
     for t in active_connections:
-        if t is not conn:
+        if t is not sender:
             # found non-self target for message
             try:
-                t.send(message.encode())
+                formattedMsg = sender.nick + ":" + message
+                t.conn.send(formattedMsg.encode())
             except ConnectionAbortedError:
                 # client no longer exists, remove from valid sender list
                 active_connections.remove(t)
-                t.shutdown(socket.SHUT_RDWR)
-                t.close()
+                t.conn.shutdown(socket.SHUT_RDWR)
+                t.conn.close()
     pass
 
 
@@ -74,6 +86,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     active_connections = []
     while True:
         conn, addr = s.accept()
-        newThread = threading.Thread(target=client_mgr, args=(conn, addr), name=addr)
-        active_connections.append(conn)
+        newActiveUser = User(conn, addr, str(addr))
+        newThread = threading.Thread(target=client_mgr, args=(newActiveUser,), name=addr)
+        active_connections.append(newActiveUser)
         newThread.start()
