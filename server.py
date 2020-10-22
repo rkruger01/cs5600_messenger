@@ -1,6 +1,7 @@
 import socket
 import threading
-
+import hashlib
+import re
 # loopback only
 # predefined port
 # predefined max connections
@@ -18,6 +19,36 @@ class User:
         self.nick = nick
         self.conn = conn
         self.addr = addr
+
+
+# not for implementation yet
+# this function generates a config file for clients to read on launch
+# Description: Generates a configuration file for clients/servers to read from and use to manage connections
+# Prerequisites: Server Nickname, port number, maximum connections to use, password(optional)
+# Postrequisites: Returns nothing, generates .echat config file in the same directory as the server script
+def cfg_file_generator():
+    print("Server Nickname:")
+    sname = input()
+    formattedSname = re.sub(r'\W+','',sname)
+    with open(formattedSname + ".echat", "w") as target:
+        target.write("[server]" + "\n")
+        target.write("serverNickname=" + sname + "\n")
+        print("Target port number:")
+        pnum = input()
+        target.write("targetPort=" + pnum + "\n")
+        print("Maximum active connections:")
+        mcon = input()
+        target.write("maxConnections=" + mcon + "\n")
+        print("Password [optional]:")
+        passwd = input()
+        if passwd:
+            # WARNING: This is NOT a secure way to store a password! This is an unsalted hash, and it is relatively
+            # easy to crack insecure passwords, given the hash. Be careful!
+            hashp = hashlib.sha256(passwd.encode()).hexdigest()
+            target.write("password=" + hashp + "\n")
+        else:
+            target.write("password=\"\"" + "\n")
+    pass
 
 
 def client_mgr(cli):
@@ -51,6 +82,8 @@ def client_mgr(cli):
 
 
 def control_msg_handler(sender, message):
+    # message is special command or emulates special command. "/" is first char
+    # i.e. /nickname, /msg (private message), /exit or /quit, etc.
     if message == "/quit":
         print(sender.nick, " disconnecting")
         if conn in active_connections:
@@ -58,8 +91,7 @@ def control_msg_handler(sender, message):
         sender.conn.shutdown(socket.SHUT_RDWR)
         sender.conn.close()
         return False
-    # message is special command
-    # i.e. /nickname, /msg (private message), /exit or /quit, etc.
+
     pass
 
 
