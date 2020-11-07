@@ -2,6 +2,7 @@ import socket
 import threading
 import hashlib
 import re
+
 # loopback only
 # predefined port
 # predefined max connections
@@ -29,7 +30,7 @@ class User:
 def cfg_file_generator():
     print("Server Nickname:")
     sname = input()
-    formattedSname = re.sub(r'\W+','',sname)
+    formattedSname = re.sub(r'\W+', '', sname)
     with open(formattedSname + ".echat", "w") as target:
         target.write("[server]" + "\n")
         target.write("serverNickname=" + sname + "\n")
@@ -73,7 +74,8 @@ def client_mgr(cli):
                     # control_msg_handler returns False, terminating connection
                     break
             # if non-control message, broadcast message
-            msg_handler(cli, message)
+            else:
+                msg_handler(cli, message)
         else:
             # message is empty. Do we kill the connection, or do we send an error message?
             # prevent empty message sent from client side?
@@ -91,23 +93,30 @@ def control_msg_handler(sender, message):
         sender.conn.shutdown(socket.SHUT_RDWR)
         sender.conn.close()
         return False
+    msg = message.split()
+    if msg[0] == "/nick":
+        if msg[1]:
+            sender.nick = msg[1]
+            sysnotify = "SYSTEM:Nickname updated to " + sender.nick
+        else:
+            sysnotify = "SYSTEM:Expected usage: /nick [new name]"
+        sender.conn.send(sysnotify.encode())
 
-    pass
+    return True
 
 
 def msg_handler(sender, message):
     # message is not control message
     for t in active_connections:
-        if t is not sender:
-            # found non-self target for message
-            try:
-                formattedMsg = sender.nick + ":" + message
-                t.conn.send(formattedMsg.encode())
-            except ConnectionAbortedError:
-                # client no longer exists, remove from valid sender list
-                active_connections.remove(t)
-                t.conn.shutdown(socket.SHUT_RDWR)
-                t.conn.close()
+        # sends message to all users, including sender
+        try:
+            formattedMsg = sender.nick + ":" + message
+            t.conn.send(formattedMsg.encode())
+        except ConnectionAbortedError:
+            # client no longer exists, remove from valid sender list
+            active_connections.remove(t)
+            t.conn.shutdown(socket.SHUT_RDWR)
+            t.conn.close()
     pass
 
 
