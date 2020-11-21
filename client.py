@@ -1,7 +1,11 @@
+import pickle
+import select
 import socket
 import threading
-import select
-import pickle
+
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+
 '''
 MESSAGE OBJECTS
 
@@ -40,7 +44,7 @@ def send_handler(s):
                 s.shutdown(socket.SHUT_RDWR)
                 s.close()
                 break
-            #sends non-quit command message, continues execution
+            # sends non-quit command message, continues execution
             msg = pickle.dumps([True, msg])
             s.send(msg)
             continue
@@ -48,8 +52,24 @@ def send_handler(s):
         s.send(msg)
 
 
+def keyExchange(s, clientRSAKeypair, clientEncryptor):
+    serverPublicKey = RSA.importKey(s.recv(4096))
+    serverEncryptor = PKCS1_OAEP.new(serverPublicKey)
+    s.sendall(clientRSAKeypair.publickey().export_key('DER'))
+    serverEncMessage = s.recv(4096)
+    msg = clientEncryptor.decrypt(serverEncMessage)
+    clientEncMessage = serverEncryptor.encrypt(msg)
+    s.sendall(clientEncMessage)
+    return serverPublicKey
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
+    clientRSAKeypair = RSA.generate(2048)
+    clientEncryptor = PKCS1_OAEP.new(clientRSAKeypair)
+    serverPublicKey = keyExchange(s, clientRSAKeypair, clientEncryptor)
+    # The client always expects the key exchange to be performed successfully. Unlike the server, the client does not
+    # compare the two values. We trust the server to be the authority here, and to notify the client if the handshake
+    # was performed incorrectly. In this case, the server notifies the client and terminates the connection as normal.
     sender = threading.Thread(target=send_handler, args=(s,))
     sender.start()
     while True:
@@ -60,7 +80,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         for rs in r:
             if s == rs:
                 try:
-                    data = rs.recv(1024)
+                    data = rs.recv(4096)
                 except OSError:
                     # connection terminated (for some reason)
                     break

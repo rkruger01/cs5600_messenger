@@ -1,9 +1,13 @@
-import socket
-from string import hexdigits
-import threading
 import hashlib
-import re
 import pickle
+import re
+import socket
+import threading
+from random import choice
+from string import hexdigits, ascii_letters
+
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
 
 # Dictionary of alert messages
 # Allows for unified updates across codebase, easier localization
@@ -11,7 +15,8 @@ serverAlertMessages = {
     "NICKUPDATE": "Nickname updated to ",
     "NICKBADARGS": "Expected usage: /nick [new name]",
     "COLORUPDATE": "Color updated to ",
-    "COLORBADARGS": "Expected usage: /color hexcolor"
+    "COLORBADARGS": "Expected usage: /color hexcolor",
+    "RSAKEYEXCHANGEERROR": "Critical error: RSA key exchange was unsuccessful",
 }
 
 # loopback only
@@ -23,16 +28,20 @@ MAX_CONNECTIONS = 5
 
 
 class User:
-    nick = ""
+    nick = None
     conn = None
-    addr = ""
-    color = ""
+    addr = None
+    color = None
+    RSAPublicKey = None
+    clientEncryptor = None
 
-    def __init__(self, conn, addr, nick, color="#000000"):
+    def __init__(self, conn, addr, nick, publicKey, color="#000000"):
         self.color = color
         self.nick = nick
         self.conn = conn
         self.addr = addr
+        self.RSAPublicKey = publicKey
+        clientEncryptor = PKCS1_OAEP.new(publicKey)
 
 
 # not for implementation yet
@@ -72,7 +81,7 @@ def cfg_file_generator():
 def client_mgr(cli):
     while True:
         try:
-            message = cli.conn.recv(1024)
+            message = cli.conn.recv(4096)
         except ConnectionResetError:
             # Connection failed, possibly due to a non-expected termination on client side
             # i.e. client crashed or force closed
@@ -163,16 +172,45 @@ def msg_handler(sender, message):
     pass
 
 
+def keyExchange(conn, serverKey, serverEncryptor):
+    conn.sendall(serverKey.publickey().export_key('DER'))
+    clientPublicKey = RSA.importKey(conn.recv(4096))
+    # generates a random ascii string to verify key handshake successful
+    clientEncryptor = PKCS1_OAEP.new(clientPublicKey)
+    msg = ''.join(choice(ascii_letters) for i in range(20)).encode()
+    encMsg = clientEncryptor.encrypt(msg)
+    conn.sendall(encMsg)
+    # Client has encrypted message. Now, wait for client to decrypt with private key, and encrypt again with
+    # server public key. Receive message and decode.
+    clientEncryptedMessage = conn.recv(4096)
+    clientDecryptedMessage = serverEncryptor.decrypt(clientEncryptedMessage)
+    # Compare bitstrings here. If encryption was successful, they should be equal.
+    goodKeyExchange = (msg == clientDecryptedMessage)
+    return clientPublicKey, goodKeyExchange
+
+
 # Main
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    serverKey = RSA.generate(2048)
+    serverEncryptor = PKCS1_OAEP.new(serverKey)
+    # serverKey contains both private and public key
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((HOST, PORT))
     s.listen(MAX_CONNECTIONS)
     active_connections = []
     while True:
         conn, addr = s.accept()
-        # TODO: Encryption handshake, verify that messages are encrypted
-        newActiveUser = User(conn, addr, str(addr))
+        # TODO: Add password exchange here
+        clientPublicKey, goodKeyExchange = keyExchange(conn, serverKey, serverEncryptor)
+        if not goodKeyExchange:
+            # Critical error: key exchange failed
+            # Notify client, terminate connection and wait for next connection
+            msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", serverAlertMessages["RSAKEYEXCHANGEERROR"]])
+            conn.sendall(msg)
+            conn.shutdown(socket.SHUT_RDWR)
+            conn.close()
+            continue
+        newActiveUser = User(conn, addr, str(addr), clientPublicKey)
         newThread = threading.Thread(target=client_mgr, args=(newActiveUser,), name=addr)
         active_connections.append(newActiveUser)
         newThread.start()
