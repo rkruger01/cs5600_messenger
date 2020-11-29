@@ -7,6 +7,7 @@ from random import choice
 from string import hexdigits, ascii_letters
 
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
 
 # Dictionary of alert messages
@@ -41,7 +42,7 @@ class User:
         self.conn = conn
         self.addr = addr
         self.RSAPublicKey = publicKey
-        clientEncryptor = PKCS1_OAEP.new(publicKey)
+        self.clientEncryptor = PKCS1_OAEP.new(publicKey)
 
 
 # not for implementation yet
@@ -78,20 +79,24 @@ def cfg_file_generator():
 # This handles each client connected to the server. If a client termimates their connection irregularly, i.e. force
 # closes the connection instead of notifying the server and gracefully closing, those errors are caught in here and
 # handled. Afterwards, the thread self-terminates.
-def client_mgr(cli):
+def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
     while True:
         try:
             message = cli.conn.recv(4096)
         except ConnectionResetError:
             # Connection failed, possibly due to a non-expected termination on client side
-            # i.e. client crashed or force closed
-            active_connections.remove(conn)
-            cli.conn.shutdown(socket.SHUT_RDWR)
-            cli.conn.close()
+            # i.e. client crashed or force close
+            try:
+                active_connections.remove(conn)
+                cli.conn.shutdown(socket.SHUT_RDWR)
+                cli.conn.close()
+            except ValueError:
+                pass
             break
         if message:
             # handle client message here
-            # decodes message object
+            # decrypt message object
+            message = serverEncryptor.decrypt(message)
             message = pickle.loads(message)
             print(cli.addr, ":", message[1])
             if message[0]:
@@ -132,6 +137,7 @@ def control_msg_handler(sender, message):
         except IndexError:
             sysmsg = serverAlertMessages["NICKBADARGS"]
         msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
+        msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
     # user wants to change their associated message color:
     if msg[0] == "/color":
@@ -148,6 +154,7 @@ def control_msg_handler(sender, message):
         except IndexError:
             sysmsg = serverAlertMessages["COLORBADARGS"]
         msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
+        msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
     return True
 
@@ -163,6 +170,7 @@ def msg_handler(sender, message):
         try:
             formattedMsg = [False, sender.color, sender.nick, message]
             formattedMsg = pickle.dumps(formattedMsg)
+            formattedMsg = t.clientEncryptor.encrypt(formattedMsg)
             t.conn.send(formattedMsg)
         except ConnectionAbortedError:
             # client no longer exists, remove from valid sender list
@@ -211,6 +219,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             conn.close()
             continue
         newActiveUser = User(conn, addr, str(addr), clientPublicKey)
-        newThread = threading.Thread(target=client_mgr, args=(newActiveUser,), name=addr)
+        newThread = threading.Thread(target=client_mgr, args=(newActiveUser, serverEncryptor,), name=addr)
         active_connections.append(newActiveUser)
         newThread.start()

@@ -4,6 +4,7 @@ import socket
 import threading
 
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
 
 '''
@@ -33,7 +34,7 @@ HOST = '127.0.0.1'
 PORT = 4252
 
 
-def send_handler(s):
+def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher):
     while True:
         msg = input()
         if msg.startswith("/"):
@@ -46,9 +47,9 @@ def send_handler(s):
                 break
             # sends non-quit command message, continues execution
             msg = pickle.dumps([True, msg])
-            s.send(msg)
-            continue
-        msg = pickle.dumps([False, msg])
+        else:
+            msg = pickle.dumps([False, msg])
+        msg = serverEncryptor.encrypt(msg)
         s.send(msg)
 
 
@@ -60,17 +61,18 @@ def keyExchange(s, clientRSAKeypair, clientEncryptor):
     msg = clientEncryptor.decrypt(serverEncMessage)
     clientEncMessage = serverEncryptor.encrypt(msg)
     s.sendall(clientEncMessage)
-    return serverPublicKey
+    return serverEncryptor
+
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     clientRSAKeypair = RSA.generate(2048)
     clientEncryptor = PKCS1_OAEP.new(clientRSAKeypair)
-    serverPublicKey = keyExchange(s, clientRSAKeypair, clientEncryptor)
+    serverEncryptor = keyExchange(s, clientRSAKeypair, clientEncryptor)
     # The client always expects the key exchange to be performed successfully. Unlike the server, the client does not
     # compare the two values. We trust the server to be the authority here, and to notify the client if the handshake
     # was performed incorrectly. In this case, the server notifies the client and terminates the connection as normal.
-    sender = threading.Thread(target=send_handler, args=(s,))
+    sender = threading.Thread(target=send_handler, args=(s, serverEncryptor))
     sender.start()
     while True:
         if s.fileno() == -1:
@@ -86,5 +88,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     break
                 if not data:
                     break
-                msg = pickle.loads(data)
+                msg = clientEncryptor.decrypt(data)
+                msg = pickle.loads(msg)
                 print(msg)
