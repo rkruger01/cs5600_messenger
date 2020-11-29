@@ -1,3 +1,4 @@
+import configparser
 import hashlib
 import pickle
 import re
@@ -9,6 +10,7 @@ from string import hexdigits, ascii_letters
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
+from requests import get
 
 # Dictionary of alert messages
 # Allows for unified updates across codebase, easier localization
@@ -23,8 +25,8 @@ serverAlertMessages = {
 # loopback only
 # predefined port
 # predefined max connections
-HOST = '127.0.0.1'
-PORT = 4252
+HOST = ''
+PORT = 4444
 MAX_CONNECTIONS = 5
 
 
@@ -45,35 +47,40 @@ class User:
         self.clientEncryptor = PKCS1_OAEP.new(publicKey)
 
 
-# not for implementation yet
 # this function generates a config file for clients to read on launch
 # Description: Generates a configuration file for clients/servers to read from and use to manage connections
-# Prerequisites: Server Nickname, port number, maximum connections to use, password(optional)
+# Prerequisites: Server Nickname, server IP address, port number, password(optional)
 # Postrequisites: Returns nothing, generates .echat config file in the same directory as the server script
 def cfg_file_generator():
+    # To include: server IP, port, password, server nickname
+    config = configparser.ConfigParser()
     print("Server Nickname:")
     sname = input()
+    # fetches external IP address for auto-configuration
+    # possibly add switch here in the future?
+    externalIP = get('https://api.ipify.org').text
+    print("Server IP (defaults to {}):".format(externalIP))
+    ip = input()
+    if not ip:
+        ip = externalIP
+    print("Server Port:")
+    port = input()
+    print("Password (optional):")
+    password = input()
     formattedSname = re.sub(r'\W+', '', sname)
+    if password:
+        # WARNING: This is not a secure way to store a password!
+        hashedPassword = hashlib.sha256(password.encode()).hexdigest()
+    else:
+        hashedPassword = ''
+    config['SERVER'] = {
+        'ServerIP': str(ip),
+        'ServerPORT': str(port),
+        'ServerPASSWORD': str(hashedPassword),
+        'ServerNICKNAME': str(sname)
+    }
     with open(formattedSname + ".echat", "w") as target:
-        target.write("[server]" + "\n")
-        target.write("serverNickname=" + sname + "\n")
-        print("Target port number:")
-        pnum = input()
-        target.write("targetPort=" + pnum + "\n")
-        print("Maximum active connections:")
-        mcon = input()
-        target.write("maxConnections=" + mcon + "\n")
-        print("Password [optional]:")
-        passwd = input()
-        if passwd:
-            # WARNING: This is NOT a secure way to store a password! This is an unsalted hash, and it is relatively
-            # easy to crack insecure passwords, given the hash. For more secure applications, consider salting the
-            # hashes, or not including the password (or the hash) in plaintext at all.
-            hashp = hashlib.sha256(passwd.encode()).hexdigest()
-            target.write("password=" + hashp + "\n")
-        else:
-            target.write("password=\"\"" + "\n")
-    pass
+        config.write(target)
 
 
 # This handles each client connected to the server. If a client termimates their connection irregularly, i.e. force
@@ -87,7 +94,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
             # Connection failed, possibly due to a non-expected termination on client side
             # i.e. client crashed or force close
             try:
-                active_connections.remove(conn)
+                active_connections.remove(cli)
                 cli.conn.shutdown(socket.SHUT_RDWR)
                 cli.conn.close()
             except ValueError:
@@ -121,7 +128,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
 def control_msg_handler(sender, message):
     if message == "/quit":
         print(sender.nick, " disconnecting")
-        if conn in active_connections:
+        if sender in active_connections:
             active_connections.remove(sender)
         sender.conn.shutdown(socket.SHUT_RDWR)
         sender.conn.close()
@@ -198,27 +205,35 @@ def keyExchange(conn, serverKey, serverEncryptor):
 
 
 # Main
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    serverKey = RSA.generate(2048)
-    serverEncryptor = PKCS1_OAEP.new(serverKey)
-    # serverKey contains both private and public key
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind((HOST, PORT))
-    s.listen(MAX_CONNECTIONS)
-    active_connections = []
-    while True:
-        conn, addr = s.accept()
-        # TODO: Add password exchange here
-        clientPublicKey, goodKeyExchange = keyExchange(conn, serverKey, serverEncryptor)
-        if not goodKeyExchange:
-            # Critical error: key exchange failed
-            # Notify client, terminate connection and wait for next connection
-            msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", serverAlertMessages["RSAKEYEXCHANGEERROR"]])
-            conn.sendall(msg)
-            conn.shutdown(socket.SHUT_RDWR)
-            conn.close()
-            continue
-        newActiveUser = User(conn, addr, str(addr), clientPublicKey)
-        newThread = threading.Thread(target=client_mgr, args=(newActiveUser, serverEncryptor,), name=addr)
-        active_connections.append(newActiveUser)
-        newThread.start()
+active_connections = []
+
+
+def main():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        serverKey = RSA.generate(2048)
+        serverEncryptor = PKCS1_OAEP.new(serverKey)
+        # serverKey contains both private and public key
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((HOST, PORT))
+        s.listen(MAX_CONNECTIONS)
+
+        while True:
+            conn, addr = s.accept()
+            # TODO: Add password exchange here
+            clientPublicKey, goodKeyExchange = keyExchange(conn, serverKey, serverEncryptor)
+            if not goodKeyExchange:
+                # Critical error: key exchange failed
+                # Notify client, terminate connection and wait for next connection
+                msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", serverAlertMessages["RSAKEYEXCHANGEERROR"]])
+                conn.sendall(msg)
+                conn.shutdown(socket.SHUT_RDWR)
+                conn.close()
+                continue
+            newActiveUser = User(conn, addr, str(addr), clientPublicKey)
+            newThread = threading.Thread(target=client_mgr, args=(newActiveUser, serverEncryptor,), name=addr)
+            active_connections.append(newActiveUser)
+            newThread.start()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,3 +1,5 @@
+import configparser
+import os
 import pickle
 import select
 import socket
@@ -30,9 +32,6 @@ messageSender is a String containing the source of the message (SERVER if the me
 message is a String that contains the message.
 '''
 
-HOST = '127.0.0.1'
-PORT = 4252
-
 
 def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher):
     while True:
@@ -41,6 +40,7 @@ def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher):
             if msg == "/quit":
                 msgList = [True, "/quit"]
                 msg = pickle.dumps(msgList)
+                msg = serverEncryptor.encrypt(msg)
                 s.send(msg)
                 s.shutdown(socket.SHUT_RDWR)
                 s.close()
@@ -64,30 +64,48 @@ def keyExchange(s, clientRSAKeypair, clientEncryptor):
     return serverEncryptor
 
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
-    clientRSAKeypair = RSA.generate(2048)
-    clientEncryptor = PKCS1_OAEP.new(clientRSAKeypair)
-    serverEncryptor = keyExchange(s, clientRSAKeypair, clientEncryptor)
-    # The client always expects the key exchange to be performed successfully. Unlike the server, the client does not
-    # compare the two values. We trust the server to be the authority here, and to notify the client if the handshake
-    # was performed incorrectly. In this case, the server notifies the client and terminates the connection as normal.
-    sender = threading.Thread(target=send_handler, args=(s, serverEncryptor))
-    sender.start()
-    while True:
-        if s.fileno() == -1:
-            # socket closed
-            break
-        r, _, _ = select.select([s], [], [])
-        for rs in r:
-            if s == rs:
-                try:
-                    data = rs.recv(4096)
-                except OSError:
-                    # connection terminated (for some reason)
-                    break
-                if not data:
-                    break
-                msg = clientEncryptor.decrypt(data)
-                msg = pickle.loads(msg)
-                print(msg)
+def serverConfigParser():
+    config = configparser.ConfigParser()
+    configFileList = [x for x in os.listdir('.') if os.path.isfile(os.path.join('.', x)) and x.endswith('.echat')]
+    for f in configFileList:
+        # If there are multiple configuration files, choose the correct one here
+        config.read(f)
+        print(config['SERVER']['serverNICKNAME'])
+    return config['SERVER']['ServerIP'], config['SERVER']['ServerPORT'], config['SERVER']['ServerPASSWORD'], \
+           config['SERVER']['ServerNICKNAME']
+
+
+def main():
+    HOST, PORT, PASSWORD, NICK = serverConfigParser()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, int(PORT)))
+        clientRSAKeypair = RSA.generate(2048)
+        clientEncryptor = PKCS1_OAEP.new(clientRSAKeypair)
+        serverEncryptor = keyExchange(s, clientRSAKeypair, clientEncryptor)
+        # The client always expects the key exchange to be performed successfully. Unlike the server, the client does
+        # not compare the two values. We trust the server to be the authority here, and to notify the client if the
+        # handshake was performed incorrectly. In this case, the server notifies the client and terminates the
+        # connection as normal.
+        sender = threading.Thread(target=send_handler, args=(s, serverEncryptor))
+        sender.start()
+        while True:
+            if s.fileno() == -1:
+                # socket closed
+                break
+            r, _, _ = select.select([s], [], [])
+            for rs in r:
+                if s == rs:
+                    try:
+                        data = rs.recv(4096)
+                    except OSError:
+                        # connection terminated (for some reason)
+                        break
+                    if not data:
+                        break
+                    msg = clientEncryptor.decrypt(data)
+                    msg = pickle.loads(msg)
+                    print(msg)
+
+
+if __name__ == "__main__":
+    main()
