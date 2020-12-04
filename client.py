@@ -37,21 +37,23 @@ message is a String that contains the message.
 def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, entryObject: tkinter.Entry):
     msg = entryObject.get()
     entryObject.delete(0, 'end')
-    print("sending ", msg)
     if msg.startswith("/"):
         if msg == "/quit":
             msgList = [True, "/quit"]
-            msg = pickle.dumps(msgList)
-            msg = serverEncryptor.encrypt(msg)
-            s.send(msg)
+            msgDump = pickle.dumps(msgList)
+            formattedMsg = serverEncryptor.encrypt(msgDump)
+            s.send(formattedMsg)
             s.shutdown(socket.SHUT_RDWR)
             s.close()
-        # sends non-quit command message, continues execution
-        msg = pickle.dumps([True, msg])
+            quit(0)
+        else:
+            # sends non-quit command message, continues execution
+            msg = pickle.dumps([True, msg])
+            s.send(msg)
     else:
         msg = pickle.dumps([False, msg])
-    msg = serverEncryptor.encrypt(msg)
-    s.send(msg)
+        msg = serverEncryptor.encrypt(msg)
+        s.send(msg)
 
 
 def keyExchange(s, clientRSAKeypair, clientEncryptor):
@@ -115,19 +117,19 @@ def main():
         gui = tkinter.Tk()
         gui.title(NICK)
         chat_frame = tkinter.Frame(master=gui, width=100, height=200, bg="red")
+        chat_frame.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
         scrollbar = tkinter.Scrollbar(chat_frame)
         scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
         msglist = tkinter.Listbox(gui, bd=0, yscrollcommand=scrollbar.set, width=100)
         msglist.pack(fill=tkinter.X)
-        chat_frame.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
         message_input = tkinter.Entry(gui, width=50)
         message_button = tkinter.Button(gui, text="Send",
                                         command=lambda: send_handler(s, serverEncryptor, message_input))
+        gui.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
         message_input.pack()
         message_button.pack()
         msglist.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=msglist.yview)
-
         # launches server listener thread for incoming messages
         receiver = threading.Thread(target=listener, args=(msglist, s, clientEncryptor,))
         receiver.start()
