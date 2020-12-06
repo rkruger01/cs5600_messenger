@@ -122,17 +122,28 @@ def main():
 
     # message sending
     inputFrame = tkinter.Frame(masterWindow)
-    inputFrame.grid(row=1, column=0, sticky=tkinter.W + tkinter.E)
+    inputFrame.grid(row=1, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     message_input = tkinter.Entry(inputFrame, width=50)
     message_button = tkinter.Button(inputFrame, text="Send",
                                     command=lambda: send_handler(s, serverEncryptor, message_input))
-    message_input.grid(row=0, column=0, columnspan=2, padx=10, pady=10)
-    message_button.grid(row=0, column=2, padx=10, pady=10)
+    message_input.grid(row=0, column=0, columnspan=2, padx=10, pady=10,
+                       sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
+    message_button.grid(row=0, column=2, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     msglist.config(yscrollcommand=scrollbar.set)
     scrollbar.config(command=msglist.yview)
 
-    masterWindow.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
+    masterWindow.columnconfigure(0, weight=1)
+    masterWindow.rowconfigure(0, weight=1)
 
+    msgFrame.rowconfigure(0, weight=1)
+    msgFrame.columnconfigure(0, weight=1)
+
+    inputFrame.columnconfigure(0, weight=1)
+    inputFrame.rowconfigure(0, weight=1)
+
+    masterWindow.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
+    masterWindow.update()
+    masterWindow.minsize(masterWindow.winfo_width(), masterWindow.winfo_height())
     HOST, PORT, PASSWORD, NICK = serverConfigParser()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         masterWindow.title(NICK)

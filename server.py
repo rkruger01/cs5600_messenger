@@ -97,7 +97,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
     while True:
         try:
             message = cli.conn.recv(4096)
-        except ConnectionResetError:
+        except (ConnectionResetError, ConnectionAbortedError):
             # Connection failed, possibly due to a non-expected termination on client side
             # i.e. client crashed or force close
             try:
