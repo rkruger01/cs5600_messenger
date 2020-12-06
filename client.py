@@ -38,6 +38,8 @@ message is a String that contains the message.
 def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, entryObject: tkinter.Entry):
     msg = entryObject.get()
     entryObject.delete(0, 'end')
+    if len(msg) == 0:
+        return
     if msg.startswith("/"):
         if msg == "/quit":
             msgList = [True, "/quit"]
@@ -71,9 +73,14 @@ def keyExchange(s, clientRSAKeypair, clientEncryptor):
 
 def serverConfigParser():
     config = configparser.ConfigParser()
-    myFile = askopenfilename()
-    config.read(myFile)
+    myFile = askopenfilename(title="Select EasyChat Configuration File",
+                             filetypes=(("ECHAT Files", "*.ECHAT"), ("All Files", "*.*")))
     # TODO: Error checking
+    try:
+        config.read(myFile)
+    except configparser.MissingSectionHeaderError:
+        showerror(title="Critical Error", message="This isn't an EasyChat configuration file!")
+        exit(1)
     return config['SERVER']['ServerIP'], config['SERVER']['ServerPORT'], config['SERVER']['ServerPASSWORD'], \
            config['SERVER']['ServerNICKNAME']
 
