@@ -5,6 +5,7 @@ import socket
 import threading
 import tkinter
 from tkinter.filedialog import askopenfilename
+from tkinter.messagebox import showerror
 
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
@@ -49,6 +50,7 @@ def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, entryObject: tkinter.Entr
         else:
             # sends non-quit command message, continues execution
             msg = pickle.dumps([True, msg])
+            msg = serverEncryptor.encrypt(msg)
             s.send(msg)
     else:
         msg = pickle.dumps([False, msg])
@@ -71,6 +73,7 @@ def serverConfigParser():
     config = configparser.ConfigParser()
     myFile = askopenfilename()
     config.read(myFile)
+    # TODO: Error checking
     return config['SERVER']['ServerIP'], config['SERVER']['ServerPORT'], config['SERVER']['ServerPASSWORD'], \
            config['SERVER']['ServerNICKNAME']
 
@@ -93,7 +96,11 @@ def listener(msgList: tkinter.Listbox, s: socket, clientEncryptor: PKCS1OAEP_Cip
                 msg = clientEncryptor.decrypt(data)
                 msg = pickle.loads(msg)
                 # TODO: HANDLE MESSAGE FORMATTING HERE
-                msgList.insert(tkinter.END, msg)
+                if msg[0]:
+                    message = "<SERVER>: " + msg[3]
+                else:
+                    message = msg[2] + ": " + msg[3]
+                msgList.insert(tkinter.END, message)
 
 
 def main():
@@ -113,9 +120,14 @@ def main():
     msglist.config(yscrollcommand=scrollbar.set)
     scrollbar.config(command=msglist.yview)
     HOST, PORT, PASSWORD, NICK = serverConfigParser()
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         gui.title(NICK)
-        s.connect((HOST, int(PORT)))
+        try:
+            s.connect((HOST, int(PORT)))
+        except ConnectionRefusedError:
+            showerror(title="Critical Error", message="The server refused your connection.")
+            exit(1)
         clientRSAKeypair = RSA.generate(2048)
         clientEncryptor = PKCS1_OAEP.new(clientRSAKeypair)
         serverEncryptor = keyExchange(s, clientRSAKeypair, clientEncryptor)

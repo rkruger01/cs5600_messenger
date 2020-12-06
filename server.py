@@ -20,14 +20,14 @@ serverAlertMessages = {
     "COLORUPDATE": "Color updated to ",
     "COLORBADARGS": "Expected usage: /color hexcolor",
     "RSAKEYEXCHANGEERROR": "Critical error: RSA key exchange was unsuccessful",
+    "SERVERSHUTDOWNMANUAL": "The server is going down for maintenance NOW"
 }
 
 # loopback only
 # predefined port
 # predefined max connections
 HOST = ''
-PORT = 4444
-MAX_CONNECTIONS = 5
+MAX_CONNECTIONS = 50
 
 
 class User:
@@ -204,6 +204,20 @@ def keyExchange(conn, serverKey, serverEncryptor):
     return clientPublicKey, goodKeyExchange
 
 
+def serverInputHandler(serverEncryptor: PKCS1OAEP_Cipher):
+    while True:
+        serverInput = input()
+        if serverInput[0] != "/":
+            # not a server command, broadcast message to everyone
+            msg_handler(User(None, None, "< SERVER BROADCAST >", None), serverInput)
+        else:
+            # server command
+            if serverInput == "/config":
+                cfg_file_generator()
+            if serverInput == "/close":
+                msg_handler(User(None, None, "< SERVER BROADCAST >", None), serverAlertMessages["SERVERSHUTDOWNMANUAL"])
+                exit(0)
+
 # Main
 active_connections = []
 
@@ -213,10 +227,15 @@ def main():
         serverKey = RSA.generate(2048)
         serverEncryptor = PKCS1_OAEP.new(serverKey)
         # serverKey contains both private and public key
+        print("Server Port:")
+        PORT = input()
+        PORT = int(PORT)
+        # TODO: Input validation
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen(MAX_CONNECTIONS)
-
+        serverThread = threading.Thread(target=serverInputHandler, args=(serverEncryptor,), name="Server")
+        serverThread.start()
         while True:
             conn, addr = s.accept()
             # TODO: Add password exchange here
