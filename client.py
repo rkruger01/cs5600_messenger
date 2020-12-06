@@ -104,25 +104,31 @@ def listener(msgList: tkinter.Listbox, s: socket, clientEncryptor: PKCS1OAEP_Cip
 
 
 def main():
-    gui = tkinter.Tk()
-    chat_frame = tkinter.Frame(master=gui, width=100, height=200, bg="red")
-    chat_frame.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
-    scrollbar = tkinter.Scrollbar(chat_frame)
-    scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
-    msglist = tkinter.Listbox(gui, bd=0, yscrollcommand=scrollbar.set, width=100)
-    msglist.pack(fill=tkinter.X)
-    message_input = tkinter.Entry(gui, width=50)
-    message_button = tkinter.Button(gui, text="Send",
+    masterWindow = tkinter.Tk()
+    # message window
+    msgFrame = tkinter.LabelFrame(masterWindow, text="Messages", padx=5, pady=5)
+    msgFrame.grid(row=0, column=0, columnspan=3, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
+    scrollbar = tkinter.Scrollbar(msgFrame)
+    scrollbar.grid(row=0, column=1, sticky=tkinter.E)
+    msglist = tkinter.Listbox(msgFrame, bd=0, yscrollcommand=scrollbar.set, width=100)
+    msglist.grid(row=0, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
+
+    # message sending
+    inputFrame = tkinter.Frame(masterWindow)
+    inputFrame.grid(row=1, column=0, sticky=tkinter.W + tkinter.E)
+    message_input = tkinter.Entry(inputFrame, width=50)
+    message_button = tkinter.Button(inputFrame, text="Send",
                                     command=lambda: send_handler(s, serverEncryptor, message_input))
-    gui.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
-    message_input.pack()
-    message_button.pack()
+    message_input.grid(row=0, column=0, columnspan=2, padx=10, pady=10)
+    message_button.grid(row=0, column=2, padx=10, pady=10)
     msglist.config(yscrollcommand=scrollbar.set)
     scrollbar.config(command=msglist.yview)
-    HOST, PORT, PASSWORD, NICK = serverConfigParser()
 
+    masterWindow.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
+
+    HOST, PORT, PASSWORD, NICK = serverConfigParser()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        gui.title(NICK)
+        masterWindow.title(NICK)
         try:
             s.connect((HOST, int(PORT)))
         except ConnectionRefusedError:
