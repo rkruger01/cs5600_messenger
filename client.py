@@ -1,10 +1,10 @@
 import configparser
-import os
 import pickle
 import select
 import socket
 import threading
 import tkinter
+from tkinter.filedialog import askopenfilename
 
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
@@ -69,12 +69,8 @@ def keyExchange(s, clientRSAKeypair, clientEncryptor):
 
 def serverConfigParser():
     config = configparser.ConfigParser()
-    configFileList = [x for x in os.listdir('.') if os.path.isfile(os.path.join('.', x)) and x.endswith('.echat')]
-    for f in configFileList:
-        # If there are multiple configuration files, choose the correct one here
-        # TODO: Allow users to select correct configuration file
-        config.read(f)
-        print(config['SERVER']['serverNICKNAME'])
+    myFile = askopenfilename()
+    config.read(myFile)
     return config['SERVER']['ServerIP'], config['SERVER']['ServerPORT'], config['SERVER']['ServerPASSWORD'], \
            config['SERVER']['ServerNICKNAME']
 
@@ -101,8 +97,24 @@ def listener(msgList: tkinter.Listbox, s: socket, clientEncryptor: PKCS1OAEP_Cip
 
 
 def main():
+    gui = tkinter.Tk()
+    chat_frame = tkinter.Frame(master=gui, width=100, height=200, bg="red")
+    chat_frame.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
+    scrollbar = tkinter.Scrollbar(chat_frame)
+    scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
+    msglist = tkinter.Listbox(gui, bd=0, yscrollcommand=scrollbar.set, width=100)
+    msglist.pack(fill=tkinter.X)
+    message_input = tkinter.Entry(gui, width=50)
+    message_button = tkinter.Button(gui, text="Send",
+                                    command=lambda: send_handler(s, serverEncryptor, message_input))
+    gui.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
+    message_input.pack()
+    message_button.pack()
+    msglist.config(yscrollcommand=scrollbar.set)
+    scrollbar.config(command=msglist.yview)
     HOST, PORT, PASSWORD, NICK = serverConfigParser()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        gui.title(NICK)
         s.connect((HOST, int(PORT)))
         clientRSAKeypair = RSA.generate(2048)
         clientEncryptor = PKCS1_OAEP.new(clientRSAKeypair)
@@ -112,24 +124,6 @@ def main():
         # handshake was performed incorrectly. In this case, the server notifies the client and terminates the
         # connection as normal.
 
-        # GUI implementation is as follows
-        # TODO: Make it prettier
-        gui = tkinter.Tk()
-        gui.title(NICK)
-        chat_frame = tkinter.Frame(master=gui, width=100, height=200, bg="red")
-        chat_frame.pack(side=tkinter.LEFT, fill=tkinter.BOTH)
-        scrollbar = tkinter.Scrollbar(chat_frame)
-        scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
-        msglist = tkinter.Listbox(gui, bd=0, yscrollcommand=scrollbar.set, width=100)
-        msglist.pack(fill=tkinter.X)
-        message_input = tkinter.Entry(gui, width=50)
-        message_button = tkinter.Button(gui, text="Send",
-                                        command=lambda: send_handler(s, serverEncryptor, message_input))
-        gui.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
-        message_input.pack()
-        message_button.pack()
-        msglist.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=msglist.yview)
         # launches server listener thread for incoming messages
         receiver = threading.Thread(target=listener, args=(msglist, s, clientEncryptor,))
         receiver.start()
