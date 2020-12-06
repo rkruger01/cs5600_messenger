@@ -17,15 +17,21 @@ from requests import get
 serverAlertMessages = {
     "NICKUPDATE": "Nickname updated to ",
     "NICKBADARGS": "Expected usage: /nick [new name]",
+    "NICKBADCHARS": "Error: Non-alphanumeric characters found. Acceptable characters are a-z, A-Z, 0-9, and underscore.",
+    "NICKILLEGALNAME": "Error: That username is not allowed!",
+    "NICKREPEAT": "Error: Another user already has that name!",
     "COLORUPDATE": "Color updated to ",
     "COLORBADARGS": "Expected usage: /color [hexcolor]",
     "RSAKEYEXCHANGEERROR": "Critical error: RSA key exchange was unsuccessful",
     "DIRECTMESSAGEBADARGS": "Expected usage: /msg [target user] [message]",
     "DIRECTMESSAGENOUSER": "Error: No such user: ",
     "DIRECTMESSAGESELFMESSAGE": "Error: Why would you need to direct message yourself?",
-    "SERVERSHUTDOWNMANUAL": "The server is going down for maintenance NOW!"
+    "SERVERSHUTDOWNMANUAL": "The server is going down for maintenance NOW!",
+    "USERDISCONNECT": " has disconnected",
+    "USERCONNECT": " has connected",
 }
-
+# Blacklisted usernames for users
+nonAllowedUsernames = ["admin", "server", "administrator"]
 # loopback only
 # predefined port
 # predefined max connections
@@ -100,6 +106,8 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
                 active_connections.remove(cli)
                 cli.conn.shutdown(socket.SHUT_RDWR)
                 cli.conn.close()
+                msg_handler(User(None, None, "< SERVER BROADCAST >", None),
+                            cli.nick + serverAlertMessages["USERDISCONNECT"])
             except ValueError:
                 pass
             break
@@ -108,7 +116,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
             # decrypt message object
             message = serverEncryptor.decrypt(message)
             message = pickle.loads(message)
-            print(cli.addr, ":", message[1])
+            print(cli.nick, ":", message[1])
             if message[0]:
                 # if message[0] is true for messages sent to the server, that message is a control message
                 # think /quit, /nick, etc.
@@ -135,15 +143,43 @@ def control_msg_handler(sender, message):
             active_connections.remove(sender)
         sender.conn.shutdown(socket.SHUT_RDWR)
         sender.conn.close()
+        msg_handler(User(None, None, "< SERVER BROADCAST >", None), sender.nick + serverAlertMessages["USERDISCONNECT"])
         return False
     # splits message apart to handle command arguments
     msg = message.split()
+    if msg[0] == "/users":
+        # client wants a list of connected users
+        users = "Connected Users: "
+        for c in active_connections:
+            users = users + c.nick + ", "
+        msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", users[:-2]])
+        msg = sender.clientEncryptor.encrypt(msg)
+        sender.conn.send(msg)
+        return True
     if msg[0] == "/nick":
-        # User wants to change nickname\
+        # User wants to change nickname
         try:
-            # TODO: Validate name (no admin strings, no special characters (including spaces), no repeats)
-            sender.nick = msg[1]
-            sysmsg = serverAlertMessages["NICKUPDATE"] + sender.nick
+            # reassemble rest of the args in case it was split
+            testNick = ''.join(msg[1:])
+            # valid character check
+            if re.match(r'^[a-zA-Z0-9]+$', testNick):
+                if testNick.lower() in nonAllowedUsernames:
+                    # restricted name check
+                    sysmsg = serverAlertMessages["NICKILLEGALNAME"]
+                else:
+                    notRepeated = True
+                    for c in active_connections:
+                        if c.nick.lower() == testNick.lower():
+                            notRepeated = False
+                            break
+                    # made it through repeat check, name is valid
+                    if notRepeated:
+                        sender.nick = testNick
+                        sysmsg = serverAlertMessages["NICKUPDATE"] + sender.nick
+                    else:
+                        sysmsg = serverAlertMessages["NICKREPEAT"]
+            else:
+                sysmsg = serverAlertMessages["NICKBADCHARS"]
         except IndexError:
             sysmsg = serverAlertMessages["NICKBADARGS"]
         msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
@@ -214,6 +250,8 @@ def msg_handler(sender, message):
             active_connections.remove(t)
             t.conn.shutdown(socket.SHUT_RDWR)
             t.conn.close()
+            msg_handler(User(None, None, "< SERVER BROADCAST >", None),
+                        t.nick + serverAlertMessages["USERDISCONNECT"])
     pass
 
 
@@ -280,6 +318,8 @@ def main():
                 conn.close()
                 continue
             newActiveUser = User(conn, addr, str(addr), clientPublicKey)
+            msg_handler(User(None, None, "< SERVER BROADCAST >", None),
+                        newActiveUser.nick + serverAlertMessages["USERCONNECT"])
             newThread = threading.Thread(target=client_mgr, args=(newActiveUser, serverEncryptor,), name=addr)
             active_connections.append(newActiveUser)
             newThread.start()
