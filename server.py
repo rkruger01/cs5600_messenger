@@ -32,10 +32,8 @@ serverAlertMessages = {
 }
 # Blacklisted usernames for users
 nonAllowedUsernames = ["admin", "server", "administrator"]
-# loopback only
-# predefined port
+
 # predefined max connections
-HOST = ''
 MAX_CONNECTIONS = 50
 
 
@@ -137,7 +135,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
 # Handles any control messages sent to the server, for example, nickname changes, color changes, quitting
 # Returns True if client remains connected, False if client has terminated their connection.
 def control_msg_handler(sender, message):
-    if message == "/quit":
+    if message in ["/quit", "/exit"]:
         print(sender.nick, " disconnecting")
         if sender in active_connections:
             active_connections.remove(sender)
@@ -282,9 +280,11 @@ def serverInputHandler():
             # server command
             if serverInput == "/config":
                 cfg_file_generator()
-            if serverInput == "/close":
-                msg_handler(User(None, None, "< SERVER BROADCAST >", None), serverAlertMessages["SERVERSHUTDOWNMANUAL"])
-                exit(0)
+            if serverInput == "/users":
+                userList = "Connected Users: "
+                for c in active_connections:
+                    userList += c.nick + ", "
+                print(userList[:-2])
 
 
 # Main
@@ -299,9 +299,8 @@ def main():
         print("Server Port:")
         PORT = input()
         PORT = int(PORT)
-        # TODO: Input validation
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((HOST, PORT))
+        s.bind(('', PORT))
         s.listen(MAX_CONNECTIONS)
         serverThread = threading.Thread(target=serverInputHandler, args=(), name="Server")
         serverThread.start()
