@@ -18,9 +18,12 @@ serverAlertMessages = {
     "NICKUPDATE": "Nickname updated to ",
     "NICKBADARGS": "Expected usage: /nick [new name]",
     "COLORUPDATE": "Color updated to ",
-    "COLORBADARGS": "Expected usage: /color hexcolor",
+    "COLORBADARGS": "Expected usage: /color [hexcolor]",
     "RSAKEYEXCHANGEERROR": "Critical error: RSA key exchange was unsuccessful",
-    "SERVERSHUTDOWNMANUAL": "The server is going down for maintenance NOW"
+    "DIRECTMESSAGEBADARGS": "Expected usage: /msg [target user] [message]",
+    "DIRECTMESSAGENOUSER": "Error: No such user: ",
+    "DIRECTMESSAGESELFMESSAGE": "Error: Why would you need to direct message yourself?",
+    "SERVERSHUTDOWNMANUAL": "The server is going down for maintenance NOW!"
 }
 
 # loopback only
@@ -138,7 +141,7 @@ def control_msg_handler(sender, message):
     if msg[0] == "/nick":
         # User wants to change nickname\
         try:
-            # TODO: Validate name (no admin strings, no special characters, no repeats)
+            # TODO: Validate name (no admin strings, no special characters (including spaces), no repeats)
             sender.nick = msg[1]
             sysmsg = serverAlertMessages["NICKUPDATE"] + sender.nick
         except IndexError:
@@ -160,6 +163,33 @@ def control_msg_handler(sender, message):
                 sysmsg = serverAlertMessages["COLORBADARGS"]
         except IndexError:
             sysmsg = serverAlertMessages["COLORBADARGS"]
+        msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
+        msg = sender.clientEncryptor.encrypt(msg)
+        sender.conn.send(msg)
+    if msg[0] == "/msg":
+        # User is attempting to direct message another user on the server
+        try:
+            target = msg[1]
+            if target != sender.nick:
+                for c in active_connections:
+                    if target == c.nick:
+                        # message found
+                        formattedMsg = [False, sender.color, "<DM from> " + sender.nick, ' '.join(msg[2:])]
+                        formattedMsg = pickle.dumps(formattedMsg)
+                        formattedMsg = c.clientEncryptor.encrypt(formattedMsg)
+                        c.conn.send(formattedMsg)
+                        # mirrors direct message to sender for clarity
+                        formattedMsg = [False, sender.color, "<DM to> " + c.nick, ' '.join(msg[2:])]
+                        formattedMsg = pickle.dumps(formattedMsg)
+                        formattedMsg = sender.clientEncryptor.encrypt(formattedMsg)
+                        sender.conn.send(formattedMsg)
+                        return True
+                sysmsg = serverAlertMessages["DIRECTMESSAGENOUSER"] + msg[1]
+            else:
+                # Trying to message yourself? Why?
+                sysmsg = serverAlertMessages["DIRECTMESSAGESELFMESSAGE"]
+        except IndexError:
+            sysmsg = serverAlertMessages["DIRECTMESSAGEBADARGS"]
         msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
@@ -199,12 +229,12 @@ def keyExchange(conn, serverKey, serverEncryptor):
     # server public key. Receive message and decode.
     clientEncryptedMessage = conn.recv(4096)
     clientDecryptedMessage = serverEncryptor.decrypt(clientEncryptedMessage)
-    # Compare bitstrings here. If encryption was successful, they should be equal.
+    # Compare strings here. If encryption was successful, they should be equal.
     goodKeyExchange = (msg == clientDecryptedMessage)
     return clientPublicKey, goodKeyExchange
 
 
-def serverInputHandler(serverEncryptor: PKCS1OAEP_Cipher):
+def serverInputHandler():
     while True:
         serverInput = input()
         if serverInput[0] != "/":
@@ -217,6 +247,7 @@ def serverInputHandler(serverEncryptor: PKCS1OAEP_Cipher):
             if serverInput == "/close":
                 msg_handler(User(None, None, "< SERVER BROADCAST >", None), serverAlertMessages["SERVERSHUTDOWNMANUAL"])
                 exit(0)
+
 
 # Main
 active_connections = []
@@ -234,7 +265,7 @@ def main():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen(MAX_CONNECTIONS)
-        serverThread = threading.Thread(target=serverInputHandler, args=(serverEncryptor,), name="Server")
+        serverThread = threading.Thread(target=serverInputHandler, args=(), name="Server")
         serverThread.start()
         while True:
             conn, addr = s.accept()
