@@ -18,6 +18,7 @@ serverAlertMessages = {
     "NICKUPDATE": "Nickname updated to ",
     "NICKBADARGS": "Expected usage: /nick [new name]",
     "NICKBADCHARS": "Error: Non-alphanumeric characters found. Acceptable characters are a-z, A-Z, 0-9, and underscore.",
+    "NICKBADLENGTH": "Error: Usernames must be between 3 and 24 characters.",
     "NICKILLEGALNAME": "Error: That username is not allowed!",
     "NICKREPEAT": "Error: Another user already has that name!",
     "COLORUPDATE": "Color updated to ",
@@ -146,7 +147,7 @@ def control_msg_handler(sender, message):
         return False
     # splits message apart to handle command arguments
     msg = message.split()
-    if msg[0] == "/users":
+    if msg[0] in ["/users", "/who"]:
         # client wants a list of connected users
         users = "Connected Users: "
         for c in active_connections:
@@ -155,25 +156,26 @@ def control_msg_handler(sender, message):
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
         return True
-    if msg[0] == "/nick":
+    if msg[0] in ["/nick", "/name"]:
         # User wants to change nickname
         try:
-            # reassemble rest of the args in case it was split
-            testNick = ''.join(msg[1:])
             # valid character check
-            if re.match(r'^[a-zA-Z0-9]+$', testNick):
-                if testNick.lower() in nonAllowedUsernames:
+            # if len >= 3, a space was in the name which is not allowed
+            if len(msg) < 3 and re.match(r'^[a-zA-Z0-9_]+$', msg[1]):
+                if msg[1].lower() in nonAllowedUsernames:
                     # restricted name check
                     sysmsg = serverAlertMessages["NICKILLEGALNAME"]
+                elif len(msg[1]) < 3 or len(msg[1]) > 24:
+                    sysmsg = serverAlertMessages["NICKBADLENGTH"]
                 else:
                     notRepeated = True
                     for c in active_connections:
-                        if c.nick.lower() == testNick.lower():
+                        if c.nick.lower() == msg[1].lower():
                             notRepeated = False
                             break
                     # made it through repeat check, name is valid
                     if notRepeated:
-                        sender.nick = testNick
+                        sender.nick = msg[1]
                         sysmsg = serverAlertMessages["NICKUPDATE"] + sender.nick
                     else:
                         sysmsg = serverAlertMessages["NICKREPEAT"]
@@ -251,7 +253,7 @@ def msg_handler(sender, message):
             t.conn.close()
             msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
                         t.nick + serverAlertMessages["USERDISCONNECT"])
-    pass
+    return
 
 
 def keyExchange(conn, serverKey, serverEncryptor):
