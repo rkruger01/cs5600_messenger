@@ -104,7 +104,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
                 active_connections.remove(cli)
                 cli.conn.shutdown(socket.SHUT_RDWR)
                 cli.conn.close()
-                msg_handler(User(None, None, "< SERVER BROADCAST >", None),
+                msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
                             cli.nick + serverAlertMessages["USERDISCONNECT"])
             except ValueError:
                 pass
@@ -141,7 +141,8 @@ def control_msg_handler(sender, message):
             active_connections.remove(sender)
         sender.conn.shutdown(socket.SHUT_RDWR)
         sender.conn.close()
-        msg_handler(User(None, None, "< SERVER BROADCAST >", None), sender.nick + serverAlertMessages["USERDISCONNECT"])
+        msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
+                    sender.nick + serverAlertMessages["USERDISCONNECT"])
         return False
     # splits message apart to handle command arguments
     msg = message.split()
@@ -150,7 +151,7 @@ def control_msg_handler(sender, message):
         users = "Connected Users: "
         for c in active_connections:
             users = users + c.nick + ", "
-        msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", users[:-2]])
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", users[:-2]])
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
         return True
@@ -180,7 +181,7 @@ def control_msg_handler(sender, message):
                 sysmsg = serverAlertMessages["NICKBADCHARS"]
         except IndexError:
             sysmsg = serverAlertMessages["NICKBADARGS"]
-        msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", sysmsg])
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
     # user wants to change their associated message color:
@@ -197,7 +198,7 @@ def control_msg_handler(sender, message):
                 sysmsg = serverAlertMessages["COLORBADARGS"]
         except IndexError:
             sysmsg = serverAlertMessages["COLORBADARGS"]
-        msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", sysmsg])
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
     if msg[0] == "/msg":
@@ -224,7 +225,7 @@ def control_msg_handler(sender, message):
                 sysmsg = serverAlertMessages["DIRECTMESSAGESELFMESSAGE"]
         except IndexError:
             sysmsg = serverAlertMessages["DIRECTMESSAGEBADARGS"]
-        msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", sysmsg])
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", sysmsg])
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
     return True
@@ -248,7 +249,7 @@ def msg_handler(sender, message):
             active_connections.remove(t)
             t.conn.shutdown(socket.SHUT_RDWR)
             t.conn.close()
-            msg_handler(User(None, None, "< SERVER BROADCAST >", None),
+            msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
                         t.nick + serverAlertMessages["USERDISCONNECT"])
     pass
 
@@ -275,7 +276,7 @@ def serverInputHandler():
         serverInput = input()
         if serverInput[0] != "/":
             # not a server command, broadcast message to everyone
-            msg_handler(User(None, None, "< SERVER BROADCAST >", None), serverInput)
+            msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"), serverInput)
         else:
             # server command
             if serverInput == "/config":
@@ -306,18 +307,18 @@ def main():
         serverThread.start()
         while True:
             conn, addr = s.accept()
-            # TODO: Add password exchange here
             clientPublicKey, goodKeyExchange = keyExchange(conn, serverKey, serverEncryptor)
             if not goodKeyExchange:
                 # Critical error: key exchange failed
                 # Notify client, terminate connection and wait for next connection
-                msg = pickle.dumps([True, "#FFFFFF", "SYSTEM", serverAlertMessages["RSAKEYEXCHANGEERROR"]])
+                msg = pickle.dumps([True, "#FF0000", "SYSTEM", serverAlertMessages["RSAKEYEXCHANGEERROR"]])
                 conn.sendall(msg)
                 conn.shutdown(socket.SHUT_RDWR)
                 conn.close()
                 continue
+            # TODO: Password exchange here, after connection is encrypted
             newActiveUser = User(conn, addr, str(addr), clientPublicKey)
-            msg_handler(User(None, None, "< SERVER BROADCAST >", None),
+            msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
                         newActiveUser.nick + serverAlertMessages["USERCONNECT"])
             newThread = threading.Thread(target=client_mgr, args=(newActiveUser, serverEncryptor,), name=addr)
             active_connections.append(newActiveUser)

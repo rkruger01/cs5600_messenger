@@ -29,7 +29,7 @@ A message object going from the server to the client is a 4-list consisting of
 
 where
 isSystemMessage is a Bool that describes whether the client should treat the received message as a control message,
-colorCode is a String containing the hex color code of the message (#FFFFFF if the message is a system message),
+colorCode is a String containing the hex color code of the message (#FF0000 if the message is a system message),
 messageSender is a String containing the source of the message (SERVER if the message is a system message),
 message is a String that contains the message.
 '''
@@ -41,7 +41,7 @@ def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, entryObject: tkinter.Entr
     if len(msg) == 0:
         return
     if msg.startswith("/"):
-        if msg == "/quit":
+        if msg in ["/quit", "/exit"]:
             msgList = [True, "/quit"]
             msgDump = pickle.dumps(msgList)
             formattedMsg = serverEncryptor.encrypt(msgDump)
@@ -85,7 +85,7 @@ def serverConfigParser():
            config['SERVER']['ServerNICKNAME']
 
 
-def listener(msgList: tkinter.Listbox, s: socket, clientEncryptor: PKCS1OAEP_Cipher):
+def listener(msgList: tkinter.Text, s: socket, clientEncryptor: PKCS1OAEP_Cipher):
     while True:
         if s.fileno() == -1:
             # socket closed
@@ -107,7 +107,10 @@ def listener(msgList: tkinter.Listbox, s: socket, clientEncryptor: PKCS1OAEP_Cip
                     message = "<SERVER>: " + msg[3]
                 else:
                     message = msg[2] + ": " + msg[3]
-                msgList.insert(tkinter.END, message)
+                msgList.tag_config(str(msg[1]), foreground=str(msg[1]))
+                msgList.config(state=tkinter.NORMAL)
+                msgList.insert(tkinter.END, message + '\n', str(msg[1]))
+                msgList.config(state=tkinter.DISABLED)
 
 
 def main():
@@ -121,9 +124,10 @@ def main():
     msgFrame.grid(row=0, column=0, columnspan=3, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     scrollbar = tkinter.Scrollbar(msgFrame)
     scrollbar.grid(row=0, column=1, sticky=tkinter.E)
-    msglist = tkinter.Listbox(msgFrame, bd=0, yscrollcommand=scrollbar.set, width=100, font=("san-serif", "11"))
+
+    msglist = tkinter.Text(msgFrame, bd=0, yscrollcommand=scrollbar.set, width=100, state=tkinter.DISABLED)
     msglist.configure(bg="#2e8274")
-    #msglist = tkinter.Listbox(msgFrame, bd=0, yscrollcommand=scrollbar.set, width=100)
+
     msglist.grid(row=0, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
 
     # message sending
