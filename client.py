@@ -115,19 +115,29 @@ def listener(msgList: tkinter.Text, s: socket, clientEncryptor: PKCS1OAEP_Cipher
 
 def main():
     masterWindow = tkinter.Tk()
+    masterWindow.title("EasyChat Application")
+    masterWindow.configure(bg="#093830")
+    #masterWindow.iconbitmap('easy_chat_icon.ico')
     # message window
-    msgFrame = tkinter.LabelFrame(masterWindow, text="Messages", padx=5, pady=5)
+    msgFrame = tkinter.LabelFrame(masterWindow, relief="flat", text="Messages", font=("Verdana", "14", "bold"), padx=5, pady=5, fg="#9ab8b3",bg="#093830")
+    #msgFrame = tkinter.LabelFrame(masterWindow, text="Messages", padx=5, pady=5)
     msgFrame.grid(row=0, column=0, columnspan=3, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     scrollbar = tkinter.Scrollbar(msgFrame)
     scrollbar.grid(row=0, column=1, sticky=tkinter.E)
+
     msglist = tkinter.Text(msgFrame, bd=0, yscrollcommand=scrollbar.set, width=100, state=tkinter.DISABLED)
+    msglist.configure(bg="#2e8274")
+
     msglist.grid(row=0, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
 
     # message sending
     inputFrame = tkinter.Frame(masterWindow)
     inputFrame.grid(row=1, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
-    message_input = tkinter.Entry(inputFrame, width=50)
-    message_button = tkinter.Button(inputFrame, text="Send",
+    message_input = tkinter.Entry(inputFrame, width=50, relief="flat", fg="#242e2c", bg="#9ab8b3", font=("sans-serif", "11"), selectbackground="#093830")
+    #message_input = tkinter.Entry(inputFrame, width=50)
+    #message_button = tkinter.Button(inputFrame, text="Send",
+    message_button = tkinter.Button(inputFrame, text="Send", font=("Verdana", "12", "bold"), bg="#2e8274", fg="#9ab8b3", activebackground="#0e4a40",
+                                    activeforeground="#242e2c", relief="flat", overrelief="flat", bd=1,
                                     command=lambda: send_handler(s, serverEncryptor, message_input))
     message_input.grid(row=0, column=0, columnspan=2, padx=10, pady=10,
                        sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
