@@ -177,6 +177,7 @@ def control_msg_handler(sender, message):
                     if notRepeated:
                         sender.nick = msg[1]
                         sysmsg = serverAlertMessages["NICKUPDATE"] + sender.nick
+                        # TODO: Notify everyone in the server that their name has changed
                     else:
                         sysmsg = serverAlertMessages["NICKREPEAT"]
             else:

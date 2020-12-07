@@ -2,6 +2,7 @@ import configparser
 import pickle
 import select
 import socket
+import string
 import threading
 import tkinter
 from tkinter.filedialog import askopenfilename
@@ -35,9 +36,13 @@ message is a String that contains the message.
 '''
 
 
-def send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, entryObject: tkinter.Entry):
+def entry_send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, entryObject: tkinter.Entry):
     msg = entryObject.get()
     entryObject.delete(0, 'end')
+    str_send_handler(s, serverEncryptor, msg)
+
+
+def str_send_handler(s, serverEncryptor: PKCS1OAEP_Cipher, msg: string):
     if len(msg) == 0:
         return
     if msg.startswith("/"):
@@ -118,10 +123,11 @@ def main():
     masterWindow.configure(bg="#093830")
     masterWindow.iconbitmap('easy_chat_icon.ico')
     # message window
-    msgFrame = tkinter.LabelFrame(masterWindow, relief="flat", text="Messages", font=("Verdana", "14", "bold"), padx=5, pady=5, fg="#9ab8b3",bg="#093830")
+    msgFrame = tkinter.LabelFrame(masterWindow, relief="flat", text="Messages", font=("Verdana", "14", "bold"), padx=5,
+                                  pady=5, fg="#9ab8b3", bg="#093830")
     msgFrame.grid(row=0, column=0, columnspan=3, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     scrollbar = tkinter.Scrollbar(msgFrame)
-    scrollbar.grid(row=0, column=1, sticky=tkinter.E)
+    scrollbar.grid(row=0, column=1, sticky=tkinter.E + tkinter.N + tkinter.S)
 
     msglist = tkinter.Text(msgFrame, bd=0, yscrollcommand=scrollbar.set, width=100, state=tkinter.DISABLED)
     msglist.configure(bg="#2e8274")
@@ -131,17 +137,28 @@ def main():
     # message sending
     inputFrame = tkinter.Frame(masterWindow)
     inputFrame.grid(row=1, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
-    message_input = tkinter.Entry(inputFrame, width=50, relief="flat", fg="#242e2c", bg="#9ab8b3", font=("sans-serif", "11"), selectbackground="#093830")
+    message_input = tkinter.Entry(inputFrame, width=50, relief="flat", fg="#242e2c", bg="#9ab8b3",
+                                  font=("sans-serif", "11"), selectbackground="#093830")
 
-    message_button = tkinter.Button(inputFrame, text="Send", font=("Verdana", "12", "bold"), bg="#2e8274", fg="#9ab8b3", activebackground="#0e4a40",
+    message_button = tkinter.Button(inputFrame, text="Send", font=("Verdana", "12", "bold"), bg="#2e8274", fg="#9ab8b3",
+                                    activebackground="#0e4a40",
                                     activeforeground="#242e2c", relief="flat", overrelief="flat", bd=1,
-                                    command=lambda: send_handler(s, serverEncryptor, message_input))
+                                    command=lambda: entry_send_handler(s, serverEncryptor, message_input))
     message_input.grid(row=0, column=0, columnspan=2, padx=10, pady=10,
                        sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     message_button.grid(row=0, column=2, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     msglist.config(yscrollcommand=scrollbar.set)
     scrollbar.config(command=msglist.yview)
+    commandFrame = tkinter.Frame(masterWindow)
+    commandFrame.configure(bg='#0e4a40')
+    commandFrame.grid(row=2, column=0, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
+    logOffButton = tkinter.Button(commandFrame, text="Log Off", font=("Verdana", "12", "bold"), bg="#2e8274",
+                                  fg="#9ab8b3",
+                                  activebackground="#0e4a40",
+                                  activeforeground="#242e2c", relief="flat", overrelief="flat", bd=1,
+                                  command=lambda: str_send_handler(s, serverEncryptor, "/quit"))
 
+    logOffButton.grid(row=0, column=2, padx=10, pady=10, sticky=tkinter.E + tkinter.W + tkinter.N + tkinter.S)
     masterWindow.columnconfigure(0, weight=1)
     masterWindow.rowconfigure(0, weight=1)
 
@@ -151,7 +168,8 @@ def main():
     inputFrame.columnconfigure(0, weight=1)
     inputFrame.rowconfigure(0, weight=1)
 
-    masterWindow.bind(sequence='<Return>', func=lambda event=None: send_handler(s, serverEncryptor, message_input))
+    masterWindow.bind(sequence='<Return>',
+                      func=lambda event=None: entry_send_handler(s, serverEncryptor, message_input))
     masterWindow.update()
     masterWindow.minsize(masterWindow.winfo_width(), masterWindow.winfo_height())
     HOST, PORT, PASSWORD, NICK = serverConfigParser()
