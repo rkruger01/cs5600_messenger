@@ -30,6 +30,8 @@ serverAlertMessages = {
     "SERVERSHUTDOWNMANUAL": "The server is going down for maintenance NOW!",
     "USERDISCONNECT": " has disconnected",
     "USERCONNECT": " has connected",
+    "INCORRECTPASSWORD": "Incorrect Password",
+    "CORRECTPASSWORD": "True"
 }
 # Blacklisted usernames for users
 nonAllowedUsernames = ["admin", "server", "administrator"]
@@ -274,6 +276,22 @@ def keyExchange(conn, serverKey, serverEncryptor):
     return clientPublicKey, goodKeyExchange
 
 
+def passwordHandler(conn, serverEncryptor, PASSWORD, cliEnc):
+    clientPass = conn.recv(4096).decode()
+    if clientPass != PASSWORD:
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", serverAlertMessages["INCORRECTPASSWORD"]])
+        msg = cliEnc.encrypt(msg)
+        conn.sendall(msg)
+        conn.shutdown(socket.SHUT_RDWR)
+        conn.close()
+        return False
+    else:
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", serverAlertMessages["CORRECTPASSWORD"]])
+        msg = cliEnc.encrypt(msg)
+        conn.sendall(msg)
+        return True
+
+
 def serverInputHandler():
     while True:
         serverInput = input()
@@ -303,6 +321,11 @@ def main():
         print("Server Port:")
         PORT = input()
         PORT = int(PORT)
+        print("Password (optional):")
+        PASSWORD = input()
+        if PASSWORD:
+            # Store hashed version in memory
+            PASSWORD = hashlib.sha256(PASSWORD.encode()).hexdigest()
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(('', PORT))
         s.listen(MAX_CONNECTIONS)
@@ -319,7 +342,10 @@ def main():
                 conn.shutdown(socket.SHUT_RDWR)
                 conn.close()
                 continue
-            # TODO: Password exchange here, after connection is encrypted
+            if PASSWORD:
+                if not passwordHandler(conn, serverEncryptor, PASSWORD, PKCS1_OAEP.new(clientPublicKey)):
+                    # Bad password exchange, connection terminated
+                    continue
             newActiveUser = User(conn, addr, str(addr), clientPublicKey)
             msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
                         newActiveUser.nick + serverAlertMessages["USERCONNECT"])

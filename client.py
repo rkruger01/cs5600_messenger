@@ -1,4 +1,5 @@
 import configparser
+import hashlib
 import pickle
 import select
 import socket
@@ -187,7 +188,15 @@ def main():
         # not compare the two values. We trust the server to be the authority here, and to notify the client if the
         # handshake was performed incorrectly. In this case, the server notifies the client and terminates the
         # connection as normal.
-
+        if PASSWORD:
+            # Server is expecting a password for entry
+            PASSWORD = hashlib.sha256(PASSWORD.encode()).hexdigest().encode()
+            s.send(PASSWORD)
+            response = clientEncryptor.decrypt(s.recv(4096))
+            response = pickle.loads(response)
+            if response[3] != "True":
+                showerror(title="Critical Error", message="Incorrect Password")
+                exit(1)
         # launches server listener thread for incoming messages
         receiver = threading.Thread(target=listener, args=(msglist, s, clientEncryptor,))
         receiver.start()
