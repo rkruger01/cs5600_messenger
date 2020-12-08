@@ -186,7 +186,7 @@ def main():
         # The client always expects the key exchange to be performed successfully. Unlike the server, the client does
         # not compare the two values. We trust the server to be the authority here, and to notify the client if the
         # handshake was performed incorrectly. In this case, the server notifies the client and terminates the
-        # connection as normal.
+        # connection.
         if PASSWORD:
             # Server is expecting a password for entry
             PASSWORD = PASSWORD.encode()
