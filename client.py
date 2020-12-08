@@ -1,5 +1,4 @@
 import configparser
-import hashlib
 import pickle
 import select
 import socket
@@ -190,7 +189,7 @@ def main():
         # connection as normal.
         if PASSWORD:
             # Server is expecting a password for entry
-            PASSWORD = hashlib.sha256(PASSWORD.encode()).hexdigest().encode()
+            PASSWORD = PASSWORD.encode()
             s.send(PASSWORD)
             response = clientEncryptor.decrypt(s.recv(4096))
             response = pickle.loads(response)

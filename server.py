@@ -31,8 +31,11 @@ serverAlertMessages = {
     "USERDISCONNECT": " has disconnected",
     "USERCONNECT": " has connected",
     "INCORRECTPASSWORD": "Incorrect Password",
-    "CORRECTPASSWORD": "True"
+    "CORRECTPASSWORD": "True",
+    "USERNAMECHANGE": " has changed their name to ",
+    "SERVERCOMMANDLIST": " /color, /help, /msg, /nick, /quit, /users"
 }
+
 # Blacklisted usernames for users
 nonAllowedUsernames = ["admin", "server", "administrator"]
 
@@ -107,7 +110,7 @@ def client_mgr(cli, serverEncryptor: PKCS1OAEP_Cipher):
                 active_connections.remove(cli)
                 cli.conn.shutdown(socket.SHUT_RDWR)
                 cli.conn.close()
-                msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
+                msg_handler(User(None, None, "<SERVER>", None, "#FF0000"),
                             cli.nick + serverAlertMessages["USERDISCONNECT"])
             except ValueError:
                 pass
@@ -144,7 +147,7 @@ def control_msg_handler(sender, message):
             active_connections.remove(sender)
         sender.conn.shutdown(socket.SHUT_RDWR)
         sender.conn.close()
-        msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
+        msg_handler(User(None, None, "<SERVER>", None, "#FF0000"),
                     sender.nick + serverAlertMessages["USERDISCONNECT"])
         return False
     # splits message apart to handle command arguments
@@ -155,6 +158,12 @@ def control_msg_handler(sender, message):
         for c in active_connections:
             users = users + c.nick + ", "
         msg = pickle.dumps([True, "#FF0000", "SYSTEM", users[:-2]])
+        msg = sender.clientEncryptor.encrypt(msg)
+        sender.conn.send(msg)
+        return True
+    if msg[0] in ["/help", "/?", "/commands"]:
+        sysmsg = "Commands: " + serverAlertMessages["SERVERCOMMANDLIST"]
+        msg = pickle.dumps([True, "#FF0000", "SYSTEM", sysmsg])
         msg = sender.clientEncryptor.encrypt(msg)
         sender.conn.send(msg)
         return True
@@ -177,9 +186,10 @@ def control_msg_handler(sender, message):
                             break
                     # made it through repeat check, name is valid
                     if notRepeated:
+                        msg_handler(User(None, None, "<SERVER>", None, "#FF0000"),
+                                    sender.nick + serverAlertMessages["USERNAMECHANGE"] + msg[1])
                         sender.nick = msg[1]
                         sysmsg = serverAlertMessages["NICKUPDATE"] + sender.nick
-                        # TODO: Notify everyone in the server that their name has changed
                     else:
                         sysmsg = serverAlertMessages["NICKREPEAT"]
             else:
@@ -254,7 +264,7 @@ def msg_handler(sender, message):
             active_connections.remove(t)
             t.conn.shutdown(socket.SHUT_RDWR)
             t.conn.close()
-            msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
+            msg_handler(User(None, None, "<SERVER>", None, "#FF0000"),
                         t.nick + serverAlertMessages["USERDISCONNECT"])
     return
 
@@ -297,7 +307,7 @@ def serverInputHandler():
         serverInput = input()
         if serverInput[0] != "/":
             # not a server command, broadcast message to everyone
-            msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"), serverInput)
+            msg_handler(User(None, None, "<SERVER>", None, "#FF0000"), serverInput)
         else:
             # server command
             if serverInput == "/config":
@@ -347,7 +357,7 @@ def main():
                     # Bad password exchange, connection terminated
                     continue
             newActiveUser = User(conn, addr, str(addr), clientPublicKey)
-            msg_handler(User(None, None, "< SERVER BROADCAST >", None, "#FF0000"),
+            msg_handler(User(None, None, "<SERVER>", None, "#FF0000"),
                         newActiveUser.nick + serverAlertMessages["USERCONNECT"])
             newThread = threading.Thread(target=client_mgr, args=(newActiveUser, serverEncryptor,), name=addr)
             active_connections.append(newActiveUser)
