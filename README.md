@@ -12,6 +12,10 @@ but surprisingly powerful chat client!
 
 - Windows 10+ (not tested on other platforms)
 
+- PyCryptodome
+
+  `pip install pycryptodome`
+
 #### Getting Started
 
 1. Download a copy of the EasyChat code to your system.
