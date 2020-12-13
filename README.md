@@ -34,7 +34,7 @@ but surprisingly powerful chat client!
        Server IP (defaults to {your public IP}):
        192.168.0.1
        Server Port:
-       1234
+       4444
        Password (optional):
        mypassword
 
