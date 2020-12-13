@@ -2,7 +2,7 @@
 
 #### Project Description
 
-This is a simple socket-based chat client developed for my Introduction to Computer Networking course, modeled after
+This is a simple socket-based chat client developed for my Computer Networking course, modeled after
 classic IRC servers. With features such as nicknames, colored messages, and public-key encryption, EasyChat is a simple
 but surprisingly powerful chat client!
 
