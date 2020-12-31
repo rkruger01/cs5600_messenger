@@ -1,10 +1,15 @@
 # EasyChat
 
+#### Security Warning
+
+Be aware: This application uses the Pickle library to unpack/repack messages being transmitted. This can be exploited,
+so be sure that you're aware of the content being unpacked.
+
 #### Project Description
 
-This is a simple socket-based chat client developed for my Computer Networking course, modeled after
-classic IRC servers. With features such as nicknames, colored messages, and public-key encryption, EasyChat is a simple
-but surprisingly powerful chat client!
+This is a simple socket-based chat client developed for my Computer Networking course, modeled after classic IRC
+servers. With features such as nicknames, colored messages, and public-key encryption, EasyChat is a simple but
+surprisingly powerful chat client!
 
 #### System Requirements
 
